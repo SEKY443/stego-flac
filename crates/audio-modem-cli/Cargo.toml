@@ -1,0 +1,26 @@
+[package]
+name = "audio-modem-cli"
+description = "Command line interface for audio-modem."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "stego-flac"
+path = "src/main.rs"
+
+[dependencies]
+audio-modem-core.workspace = true
+
+anyhow.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
+flacenc.workspace = true
+rpassword.workspace = true
+symphonia.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+crc32fast.workspace = true
+flate2.workspace = true

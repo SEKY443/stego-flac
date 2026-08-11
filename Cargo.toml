@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = ["crates/audio-modem-core", "crates/audio-modem-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/seky/audio-modem-cli"
+
+[workspace.dependencies]
+audio-modem-core = { path = "crates/audio-modem-core" }
+
+aes-gcm = "0.10"
+anyhow = "1"
+argon2 = "0.5"
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+crc32fast = "1"
+flacenc = "0.5"
+flate2 = "1"
+getrandom = "0.3"
+raptorq = "2"
+rustfft = "6"
+rayon = "1.10"
+rpassword = "7"
+symphonia = { version = "0.6", default-features = false, features = [
+    "flac",
+    "wav",
+    "pcm",
+    "mp3",
+    "isomp4",
+    "aac",
+    "ogg",
+    "vorbis",
+] }
+thiserror = "2"
+zeroize = { version = "1", features = ["derive"] }
+zstd = "0.13"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

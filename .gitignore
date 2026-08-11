@@ -1,0 +1,21 @@
+/target
+**/*.rs.bk
+.DS_Store
+
+# The figure scripts are plain modules; Python caches its bytecode next to them.
+__pycache__/
+*.py[cod]
+
+# Carriers are generated output and can be large, so they stay out of the repo
+# by default. The two demo files linked from the README are the exception --
+# they are the point of the project, and a reader should be able to play one
+# without building anything first.
+*.flac
+!tests/fixtures/*.flac
+
+# test/ is a scratch area for whatever media is being tried out. Those are the
+# user's own files, not project assets, so nothing there is tracked except the
+# two demo carriers the README links to.
+test/*
+!test/warandpeace.flac
+!test/warandpeace-plain.flac
