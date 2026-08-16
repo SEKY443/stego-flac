@@ -121,7 +121,8 @@ impl Plan {
     /// Reserve the widest cover band a frame of `frame_bytes` can afford.
     ///
     /// Returns the band's upper edge in Hz, or `None` for waveforms that cannot
-    /// carry a cover. See [`CoverPlan::auto`] for why size decides this.
+    /// carry a cover. See [`crate::modem::ofdm::CoverPlan::auto`] for why size
+    /// decides this.
     pub fn set_auto_cover(&mut self, frame_bytes: usize, attenuation_db: f64) -> Option<f64> {
         match self {
             Plan::Ofdm(config) => {

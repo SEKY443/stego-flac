@@ -7,6 +7,7 @@ use anyhow::bail;
 use anyhow::{Context, Result};
 use audio_modem_core::modem::ofdm::COVER_TELEPHONE_HZ;
 use audio_modem_core::{encode_frame, format, to_i16, Carrier, EncodeParams, KdfParams, Plan};
+use serde_json::json;
 
 use crate::cli::{ChannelChoice, CoverMode, EncodeArgs};
 use crate::commands::{guard_output, human_bytes, human_duration, Stage};
@@ -78,7 +79,7 @@ pub fn run(args: &EncodeArgs) -> Result<()> {
         (!args.no_store_name && args.reads_stdin()).then(|| format::default_name(detected))
     });
 
-    let stage = Stage::new();
+    let stage = Stage::new(args.output_args.json);
     stage.begin("compressing and encrypting");
     let (frame, report) = encode_frame(&plaintext, stored_name.as_deref(), &params)?;
 
@@ -160,6 +161,47 @@ pub fn run(args: &EncodeArgs) -> Result<()> {
 
     let carrier_bytes = fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
     let duration = (samples.len() / channels) as f64 / f64::from(plan.sample_rate());
+
+    if args.output_args.json {
+        let (low_hz, high_hz) = plan.band_hz();
+        let out = json!({
+            "output_path": output.display().to_string(),
+            "plaintext_bytes": report.plaintext_len,
+            "compressed": report.compressed.then(|| json!({
+                "bytes": report.compressed_len,
+                "ratio": report.compression_ratio(),
+            })),
+            "encrypted": report.encrypted,
+            "stored_name": stored_name,
+            "detected_format": detected.map(|format| json!({
+                "id": format.id,
+                "extension": format.extension,
+                "description": format.description,
+            })),
+            "fec": {
+                "packets": report.fec_packets,
+                "repair_percent": args.fec_overhead,
+            },
+            "frame_bytes": report.frame_len,
+            "expansion_ratio": report.expansion_ratio(),
+            "waveform": {
+                "description": plan.describe(),
+                "bit_rate": plan.bit_rate(),
+                "band_hz": [low_hz, high_hz],
+            },
+            "cover": plan.cover_band_hz().map(|(low, high)| json!({
+                "band_hz": [low, high],
+                "attenuation_db": args.cover_attenuation,
+            })),
+            "channels": channels,
+            "channels_auto": args.channels == ChannelChoice::Auto && cover_audio.is_none(),
+            "duration_secs": duration,
+            "carrier_bytes": carrier_bytes,
+            "carrier_ratio": carrier_bytes as f64 / report.plaintext_len.max(1) as f64,
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
 
     if args.quiet {
         if !report.encrypted {

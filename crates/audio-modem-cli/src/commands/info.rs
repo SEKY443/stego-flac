@@ -4,6 +4,7 @@ use std::fs;
 
 use anyhow::{bail, Context, Result};
 use audio_modem_core::{from_i16, Carrier, Header, HEADER_LEN};
+use serde_json::json;
 
 use crate::cli::InfoArgs;
 use crate::commands::{human_bytes, human_duration, plan_from_tags};
@@ -30,36 +31,13 @@ pub fn run(args: &InfoArgs) -> Result<()> {
     }
 
     let duration = audio.samples.len() as f64 / f64::from(audio.sample_rate);
-
-    println!("{}", args.input.display());
-    println!();
-    println!(
-        "  container          {} Hz, {} channel(s), {} samples",
-        audio.sample_rate,
-        audio.channels,
-        audio.samples.len()
-    );
-    println!("  duration           {}", human_duration(duration));
     let (low_hz, high_hz) = plan.band_hz();
-    println!(
-        "  profile            {}",
-        match tags.get(PROFILE_TAG) {
-            Some(name) => name.clone(),
-            None if recorded.is_some() => "custom (from metadata)".to_string(),
-            None => "assumed default".to_string(),
-        }
-    );
-    println!(
-        "  waveform           {} ({:.0} bit/s, {:.0}-{:.0} Hz)",
-        plan.describe(),
-        plan.bit_rate(),
-        low_hz,
-        high_hz
-    );
-
-    if recorded.is_none() && !tags.contains_key(PLAN_TAG) {
-        println!("                     (no plan recorded in metadata)");
-    }
+    let profile_label = match tags.get(PROFILE_TAG) {
+        Some(name) => name.clone(),
+        None if recorded.is_some() => "custom (from metadata)".to_string(),
+        None => "assumed default".to_string(),
+    };
+    let plan_in_metadata = recorded.is_some() || tags.contains_key(PLAN_TAG);
 
     // Only the header is demodulated. At the default plan that is 92 bytes =
     // 184 symbols = 8832 samples, so `info` is effectively instant even for a
@@ -86,6 +64,63 @@ pub fn run(args: &InfoArgs) -> Result<()> {
         * plan.bit_rate()
         / (8.0 * f64::from(plan.sample_rate()))) as u64;
 
+    if args.output.json {
+        let out = json!({
+            "path": args.input.display().to_string(),
+            "container": {
+                "sample_rate_hz": audio.sample_rate,
+                "channels": audio.channels,
+                "samples": audio.samples.len(),
+            },
+            "duration_secs": duration,
+            "profile": profile_label,
+            "plan_in_metadata": plan_in_metadata,
+            "waveform": {
+                "description": plan.describe(),
+                "bit_rate": plan.bit_rate(),
+                "band_hz": [low_hz, high_hz],
+            },
+            "format_version": header.version,
+            "payload_bytes": header.original_len,
+            "compressed": header.is_compressed(),
+            "encrypted": header.is_encrypted(),
+            "argon2id": header.is_encrypted().then(|| json!({
+                "m_cost_kib": header.kdf.m_cost,
+                "t_cost": header.kdf.t_cost,
+                "p_cost": header.kdf.p_cost,
+            })),
+            "name_stored": header.is_named(),
+            "format_stored": header.has_format(),
+            "fec": header.is_fec(),
+            "fec_symbol_size_bytes": header.fec_symbol_size,
+            "frame_bytes": declared,
+            "carried_bytes": carried,
+            "short_by_bytes": (carried < declared).then(|| declared - carried),
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
+
+    println!("{}", args.input.display());
+    println!();
+    println!(
+        "  container          {} Hz, {} channel(s), {} samples",
+        audio.sample_rate,
+        audio.channels,
+        audio.samples.len()
+    );
+    println!("  duration           {}", human_duration(duration));
+    println!("  profile            {profile_label}");
+    println!(
+        "  waveform           {} ({:.0} bit/s, {:.0}-{:.0} Hz)",
+        plan.describe(),
+        plan.bit_rate(),
+        low_hz,
+        high_hz
+    );
+    if !plan_in_metadata {
+        println!("                     (no plan recorded in metadata)");
+    }
     println!("  format version     {}", header.version);
     println!(
         "  payload size       {}{}",

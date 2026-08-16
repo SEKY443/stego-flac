@@ -19,7 +19,7 @@ fn main() -> Result<()> {
         Command::Encode(args) => commands::encode::run(args),
         Command::Decode(args) => commands::decode::run(args),
         Command::Info(args) => commands::info::run(args),
-        Command::Plan(args) => commands::plan::run(args),
+        Command::Plan(args) => commands::plan::run(&args.plan, &args.output),
         Command::Completions(args) => {
             let mut command = <Cli as clap::CommandFactory>::command();
             let name = command.get_name().to_string();

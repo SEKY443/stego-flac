@@ -327,10 +327,15 @@ pub fn encode_frame(
         crypto::fill_random(&mut nonce)?;
     }
 
+    // Captured before `body` is consumed below (the unencrypted path moves it
+    // into `sealed`), and used directly in the report instead of working
+    // backwards from `sealed.len()`.
+    let body_len = body.len();
+
     let ciphertext_len = if params.passphrase.is_some() {
-        (body.len() + TAG_LEN) as u64
+        (body_len + TAG_LEN) as u64
     } else {
-        body.len() as u64
+        body_len as u64
     };
 
     // The AAD is derived from a header that is complete except for the FEC
@@ -373,15 +378,7 @@ pub fn encode_frame(
 
     let report = EncodeReport {
         plaintext_len: plaintext.len(),
-        compressed_len: if compressed_flag {
-            sealed.len().saturating_sub(if flags & FLAG_ENCRYPTED != 0 {
-                TAG_LEN
-            } else {
-                0
-            })
-        } else {
-            envelope.len()
-        },
+        compressed_len: if compressed_flag { body_len } else { envelope.len() },
         ciphertext_len: sealed.len(),
         fec_packets: encoded.packet_count,
         frame_len: frame.len(),

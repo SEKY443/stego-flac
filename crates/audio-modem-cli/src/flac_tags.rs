@@ -37,7 +37,7 @@ pub const PROFILE_TAG: &str = "AUDIOMODEM_PROFILE";
 
 const VENDOR: &str = concat!("stego-flac ", env!("CARGO_PKG_VERSION"));
 
-/// Build a VORBIS_COMMENT block payload from `KEY=value` pairs.
+/// Build a `VORBIS_COMMENT` block payload from `KEY=value` pairs.
 ///
 /// Note the endianness trap: FLAC is a big-endian format, but the Vorbis
 /// comment block embedded in it keeps Vorbis's little-endian length fields.

@@ -642,9 +642,7 @@ impl OfdmModem {
             .for_each_init(
                 || vec![Complex32::new(0.0, 0.0); n],
                 |spectrum, (index, slot)| {
-                    spectrum
-                        .iter_mut()
-                        .for_each(|c| *c = Complex32::new(0.0, 0.0));
+                    spectrum.fill(Complex32::new(0.0, 0.0));
                     let mut reader = BitReader::new_at(payload, index * bits_per_symbol);
 
                     for offset in 0..bins {

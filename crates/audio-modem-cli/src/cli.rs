@@ -36,9 +36,24 @@ pub enum Command {
     /// Print the header of a carrier without decoding the payload.
     Info(InfoArgs),
     /// Print the tone plan and throughput for a given configuration.
-    Plan(PlanArgs),
+    Plan(PlanCommandArgs),
     /// Emit a shell completion script.
     Completions(CompletionArgs),
+}
+
+/// Machine-readable output, flattened into every subcommand that prints a
+/// report.
+///
+/// Exists for a caller that parses the result programmatically — a GUI, a
+/// script, another process — rather than a person reading a terminal. The
+/// progress messages [`Stage`](crate::commands::Stage) prints are unaffected:
+/// they only ever appear when stderr is itself a terminal, so a JSON consumer
+/// never sees them mixed into its stream.
+#[derive(Debug, Clone, Copy, Args)]
+pub struct OutputArgs {
+    /// Print a single JSON object instead of the human-readable report.
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Debug, Args)]
@@ -228,6 +243,9 @@ pub struct EncodeArgs {
 
     #[command(flatten)]
     pub plan: PlanArgs,
+
+    #[command(flatten)]
+    pub output_args: OutputArgs,
 }
 
 #[derive(Debug, Args)]
@@ -254,6 +272,9 @@ pub struct DecodeArgs {
 
     #[command(flatten)]
     pub plan: PlanArgs,
+
+    #[command(flatten)]
+    pub output_args: OutputArgs,
 }
 
 #[derive(Debug, Args)]
@@ -263,6 +284,9 @@ pub struct InfoArgs {
 
     #[command(flatten)]
     pub plan: PlanArgs,
+
+    #[command(flatten)]
+    pub output: OutputArgs,
 }
 
 /// Tone-plan parameters, shared by every subcommand.
@@ -313,6 +337,21 @@ pub struct PlanArgs {
     /// Lowest data-bearing bin. Applies to both waveforms.
     #[arg(long, value_name = "BIN")]
     pub base_bin: Option<usize>,
+}
+
+/// Arguments for the standalone `plan` subcommand.
+///
+/// A thin wrapper rather than putting `output` on [`PlanArgs`] itself, because
+/// `PlanArgs` is also flattened into `encode`, `decode`, and `info` — each of
+/// which already flattens its own [`OutputArgs`], and clap rejects a `--json`
+/// flag declared twice.
+#[derive(Debug, Args)]
+pub struct PlanCommandArgs {
+    #[command(flatten)]
+    pub plan: PlanArgs,
+
+    #[command(flatten)]
+    pub output: OutputArgs,
 }
 
 impl PlanArgs {

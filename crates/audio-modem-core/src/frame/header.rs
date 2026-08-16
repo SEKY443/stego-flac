@@ -153,11 +153,12 @@ impl Header {
     ///
     /// Covers every field that influences key derivation or payload
     /// interpretation *and* is known before encryption runs. Deliberately
-    /// excluded: `fec_payload_len`, `oti`, and `fec_symbol_size`, which are not
-    /// determined until after the ciphertext exists — a chicken-and-egg the AAD
-    /// cannot resolve. Those fields sit below the crypto layer, so corrupting
-    /// them yields a FEC failure or a ciphertext that fails its tag anyway;
-    /// they cannot be used to steer decryption.
+    /// excluded: `fec_payload_len` and `oti`, which are not determined until
+    /// after the ciphertext exists — a chicken-and-egg the AAD cannot resolve —
+    /// and `fec_symbol_size`, which *is* known this early but sits below the
+    /// crypto layer regardless. All three only ever drive how the FEC region is
+    /// chunked and reconstructed; corrupting any of them yields a FEC failure
+    /// or a ciphertext that fails its tag, never a way to steer decryption.
     pub fn aad(&self) -> Vec<u8> {
         let mut aad = Vec::with_capacity(62);
         aad.extend_from_slice(&MAGIC);

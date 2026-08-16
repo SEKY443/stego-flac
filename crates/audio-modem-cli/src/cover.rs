@@ -31,14 +31,14 @@ use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, TrackType};
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
 
 /// Decode `path` to mono `f32` at `target_rate`, low-passed at `ceiling_hz`.
 pub fn load(path: &Path, target_rate: u32, ceiling_hz: f32) -> Result<Vec<f32>> {
     let file = std::fs::File::open(path)
         .with_context(|| format!("opening cover audio {}", path.display()))?;
-    let stream = MediaSourceStream::new(Box::new(file), Default::default());
+    let stream = MediaSourceStream::new(Box::new(file), MediaSourceStreamOptions::default());
 
     let mut hint = Hint::new();
     if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
@@ -77,8 +77,7 @@ pub fn load(path: &Path, target_rate: u32, ceiling_hz: f32) -> Result<Vec<f32>> 
     let channels = params
         .channels
         .as_ref()
-        .map(|channels| channels.count())
-        .unwrap_or(1)
+        .map_or(1, symphonia::core::audio::Channels::count)
         .max(1);
 
     let mut decoder = symphonia::default::get_codecs()
@@ -133,7 +132,11 @@ fn downmix(interleaved: &[f32], channels: usize) -> Vec<f32> {
 /// Low-pass near the cover ceiling, then linearly resample.
 fn resample(mono: &[f32], from: u32, to: u32, ceiling_hz: f32) -> Vec<f32> {
     let filtered = low_pass(mono, from as f32, ceiling_hz);
-    if from == to || filtered.is_empty() {
+    // `from == 0` would otherwise divide the ratio to zero and blow the output
+    // length up towards `usize::MAX` below -- guard it here rather than let a
+    // malformed source file (a declared-but-bogus sample rate) turn into a
+    // multi-exabyte allocation attempt.
+    if from == to || from == 0 || filtered.is_empty() {
         return filtered;
     }
 
@@ -163,7 +166,7 @@ fn low_pass(samples: &[f32], sample_rate: f32, cutoff_hz: f32) -> Vec<f32> {
     let mut out = samples.to_vec();
     for _ in 0..2 {
         let mut state = 0.0f32;
-        for value in out.iter_mut() {
+        for value in &mut out {
             state += alpha * (*value - state);
             *value = state;
         }

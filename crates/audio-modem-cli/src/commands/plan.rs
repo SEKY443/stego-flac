@@ -2,14 +2,19 @@
 
 use anyhow::Result;
 use audio_modem_core::{Carrier, Plan, Profile};
+use serde_json::json;
 
-use crate::cli::PlanArgs;
+use crate::cli::{OutputArgs, PlanArgs};
 use crate::commands::{human_bytes, human_duration};
 
-pub fn run(args: &PlanArgs) -> Result<()> {
+pub fn run(args: &PlanArgs, output: &OutputArgs) -> Result<()> {
     let plan = args.resolve(None)?;
     let modem = Carrier::new(plan)?;
     let (low_hz, high_hz) = plan.band_hz();
+
+    if output.json {
+        return print_json(&plan, &modem, low_hz, high_hz);
+    }
 
     println!("{}", plan.describe());
     println!();
@@ -98,5 +103,67 @@ pub fn run(args: &PlanArgs) -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+fn print_json(plan: &Plan, modem: &Carrier, low_hz: f64, high_hz: f64) -> Result<()> {
+    let waveform = match plan {
+        Plan::Fsk(config) => json!({
+            "mode": "fsk",
+            "symbol_length_samples": config.samples_per_symbol,
+            "symbol_rate_baud": config.symbol_rate(),
+            "bin_width_hz": config.symbol_rate(),
+            "tone_count": config.tone_count(),
+            "tone_bins": [config.base_bin, config.highest_bin()],
+            "bin_spacing": config.bin_spacing,
+            "bits_per_symbol": config.bits_per_symbol,
+        }),
+        Plan::Ofdm(config) => json!({
+            "mode": "ofdm",
+            "fft_size": config.fft_size,
+            "symbol_rate_baud": config.symbol_rate(),
+            "bin_width_hz": config.bin_width_hz(),
+            "subcarriers": config.active_bins(),
+            "subcarrier_bins": [config.base_bin, config.top_bin],
+            "constellation_bits": config.bits_per_bin,
+            "bits_per_symbol": config.bits_per_symbol(),
+        }),
+    };
+
+    let duration_table: Vec<_> = [1_024u64, 262_144, 20_000_000]
+        .into_iter()
+        .map(|size| {
+            json!({
+                "payload_bytes": size,
+                "duration_secs": modem.duration_secs(size as usize),
+            })
+        })
+        .collect();
+
+    let presets: Vec<_> = Profile::ALL
+        .into_iter()
+        .map(|profile| {
+            let other = profile.plan();
+            json!({
+                "name": profile.name(),
+                "bit_rate": other.bit_rate(),
+                "description": other.describe(),
+            })
+        })
+        .collect();
+
+    let out = json!({
+        "description": plan.describe(),
+        "sample_rate_hz": plan.sample_rate(),
+        "band_hz": [low_hz, high_hz],
+        "amplitude": plan.amplitude(),
+        "waveform": waveform,
+        "bit_rate": plan.bit_rate(),
+        "carrier_expansion_ratio": 16.0 / (plan.bit_rate() / f64::from(plan.sample_rate())),
+        "duration_for_payload": duration_table,
+        "presets": presets,
+    });
+
+    println!("{}", serde_json::to_string_pretty(&out)?);
     Ok(())
 }

@@ -53,7 +53,7 @@ use symphonia::core::audio::GenericAudioBufferRef;
 use symphonia::core::codecs::audio::{AudioDecoder, AudioDecoderOptions};
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::formats::{FormatOptions, FormatReader, TrackType};
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::default::codecs::FlacDecoder;
 use symphonia::default::formats::FlacReader;
 
@@ -137,7 +137,7 @@ pub fn write_flac(
 /// Read a FLAC file into interleaved 16-bit PCM.
 pub fn read_flac(path: &Path) -> Result<FlacAudio> {
     let file = fs::File::open(path).with_context(|| format!("opening {}", path.display()))?;
-    let stream = MediaSourceStream::new(Box::new(file), Default::default());
+    let stream = MediaSourceStream::new(Box::new(file), MediaSourceStreamOptions::default());
 
     // The format is known, so the reader is constructed directly rather than
     // through the probe: fewer moving parts, and a clearer error when the file
@@ -161,8 +161,7 @@ pub fn read_flac(path: &Path) -> Result<FlacAudio> {
     let channels = audio_params
         .channels
         .as_ref()
-        .map(|channels| channels.count())
-        .unwrap_or(1);
+        .map_or(1, symphonia::core::audio::Channels::count);
 
     let mut decoder = FlacDecoder::try_new(&audio_params, &AudioDecoderOptions::default())
         .map_err(|error| anyhow!("could not start the FLAC decoder: {error}"))?;

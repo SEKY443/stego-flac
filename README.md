@@ -148,6 +148,16 @@ history.
 
 `--no-encrypt` writes a plaintext carrier and warns on stderr.
 
+Every subcommand that prints a report — `encode`, `decode`, `info`, `plan` —
+takes `--json` to emit one JSON object on stdout instead of the formatted text,
+for a caller that parses the result rather than a person reading a terminal.
+With `--json`, the stage progress that otherwise only appears on an
+interactive terminal (`compressing and encrypting`, `modulating`, …) is
+instead written to stderr as one `{"stage": "..."}` line per stage, regardless
+of whether stderr is a TTY — the case a wrapping GUI or script is actually in.
+`decode -o -` keeps the payload on stdout and moves the JSON report to stderr,
+the same way it already moves the text summary there.
+
 ## Throughput
 
 Three presets. The default fills the whole time-frequency plane; the two FSK

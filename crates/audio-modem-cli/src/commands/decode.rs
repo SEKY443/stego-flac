@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use audio_modem_core::{decode_frame, from_i16, Carrier, Header};
+use serde_json::json;
 
 use crate::cli::{is_stream, DecodeArgs};
 use crate::commands::{guard_output, human_bytes, plan_from_tags, Stage};
@@ -19,7 +20,7 @@ pub fn run(args: &DecodeArgs) -> Result<()> {
     let plan = args.plan.resolve(recorded)?;
     let modem = Carrier::new(plan).context("building the modem")?;
 
-    let stage = Stage::new();
+    let stage = Stage::new(args.output_args.json);
     stage.begin("decoding FLAC");
     let audio = flac_io::read_flac(&args.input)?;
     let samples = prepare_samples(&audio, &modem, &args.input)?;
@@ -50,19 +51,22 @@ pub fn run(args: &DecodeArgs) -> Result<()> {
         None
     };
 
-    let stage = Stage::new();
+    let stage = Stage::new(args.output_args.json);
     stage.begin("decrypting and decompressing");
     let payload = decode_frame(&frame, secret.as_ref().map(|s| s.as_slice()))?;
     stage.done();
 
     // Writing the payload to standard output makes stdout a data channel, so
-    // the summary moves to stderr rather than corrupting whatever is piped.
+    // the summary -- JSON or text -- moves to stderr rather than corrupting
+    // whatever is piped.
     let to_stdout = args.output.as_deref().is_some_and(is_stream);
     if to_stdout {
         std::io::stdout()
             .write_all(&payload.data)
             .context("writing standard output")?;
-        if !args.quiet {
+        if args.output_args.json {
+            eprintln!("{}", serde_json::to_string_pretty(&summary(&payload, None))?);
+        } else if !args.quiet {
             eprintln!("recovered {}", human_bytes(payload.data.len() as u64));
         }
         return Ok(());
@@ -73,7 +77,12 @@ pub fn run(args: &DecodeArgs) -> Result<()> {
 
     fs::write(&output, &payload.data).with_context(|| format!("writing {}", output.display()))?;
 
-    if !args.quiet {
+    if args.output_args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&summary(&payload, Some(&output)))?
+        );
+    } else if !args.quiet {
         println!(
             "recovered {} to {}{}",
             human_bytes(payload.data.len() as u64),
@@ -86,6 +95,24 @@ pub fn run(args: &DecodeArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Build the machine-readable decode summary.
+///
+/// `output` is `None` when the payload went to standard output instead of a
+/// file.
+fn summary(payload: &audio_modem_core::DecodedPayload, output: Option<&Path>) -> serde_json::Value {
+    json!({
+        "output_path": output.map(|path| path.display().to_string()),
+        "recovered_bytes": payload.data.len(),
+        "name": payload.name,
+        "format": payload.format.map(|format| json!({
+            "id": format.id,
+            "extension": format.extension,
+            "description": format.description,
+        })),
+        "encoded_at_unix": payload.encoded_at,
+    })
 }
 
 /// Decide where to write the recovered file.
